@@ -1,10 +1,3 @@
-streamlit
-pandas
-Pillow
-folium
-streamlit-folium
-geopy
-
 import streamlit as st
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
