@@ -1,19 +1,44 @@
-# 🎈 Blank app template
+# 📸 どこでも思い出フォトマップ (Memory Photo Map)
 
-A simple Streamlit app template for you to modify!
+旅行の写真や思い出の場所を、地図上に記録して保存できるWebアプリケーションです。
+StreamlitとSupabase（データベース）を連携させ、アップロードした写真や検索した場所を永続的に記録できるようにしました。
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://blank-app-template.streamlit.app/)
+## 🚀 アプリを試す (Demo URL)
+このURLで試すことができます（スリープ状態のときは青色の起動ボタンを押してください）：
+**[ https://blank-app-6z415a2hz4j.streamlit.app/Photo_Map ]**
 
-### How to run it on your own machine
+---
 
-1. Install the requirements
+## 🛠️ 主な機能
 
-   ```
-   $ pip install -r requirements.txt
-   ```
+### 1. 📍 写真から自動登録 (GPS活用)
+スマホなどで撮影した「位置情報（Exif）付きの写真」をアップロードすると、**撮影場所の緯度経度を自動で読み取り**、地図上にピンを立てます。
 
-2. Run the app
+### 2. 🔍 地名検索で手動登録
+位置情報がない写真や、思い出の場所（例：「熊本城」「東京タワー」）を文字で検索し、**その場所を特定して地図に登録**できます。
 
-   ```
-   $ streamlit run streamlit_app.py
-   ```
+### 3. 💾 データベース保存 (Supabase)
+登録したデータ（場所、コメント、緯度経度）は、外部データベース（Supabase）にリアルタイムで保存されます。そのため、**ブラウザを閉じてもデータが消えることはありません**。
+
+---
+
+## 💻 使用した技術
+* **Frontend:** Streamlit
+* **Database:** Supabase (PostgreSQL)
+* **Libraries:**
+    * `folium` / `streamlit-folium`: 地図の表示
+    * `Pillow`: 写真の処理・Exifデータの取得
+    * `geopy`: 地名から緯度経度への変換（ジオコーディング）
+    * `supabase`: データベースへの接続
+
+---
+
+## 💬 開発のプロセスと振り返り
+
+### 🤖 AI (Gemini) への指示と活用
+* **企画段階:** 「旅行が好きなので、写真を地図に残せるアプリを作りたい」と相談し、ベースとなる機能を決定しました。
+* **機能実装:** 「GPSがない写真はどうすればいい？」と相談し、地名検索機能を追加しました。また、データが消えないようにデータベース（Supabase）との連携コードを生成してもらいました。
+
+### 💦 大変だったこと・工夫した点
+* **ファイル管理のトラブル:** 開発途中で誤ってメインファイルを上書きしてしまい、コードが消えるトラブルがありました。GitHubの `pages` 機能を使ってファイルを分割管理することで解決しました。
+* **データベース連携:** 最初は `requirements.txt` の設定不足で地図が表示されないエラーが出ましたが、必要なライブラリ（`folium`, `supabase`など）を正しく記述することで解決しました。
