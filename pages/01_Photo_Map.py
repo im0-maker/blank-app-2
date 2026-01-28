@@ -4,21 +4,31 @@ from PIL.ExifTags import TAGS, GPSTAGS
 import folium
 from streamlit_folium import st_folium
 from geopy.geocoders import Nominatim
+from supabase import create_client, Client
 import time
 
-st.set_page_config(layout="wide", page_title="思い出フォトマップ")
+st.set_page_config(layout="wide", page_title="思い出フォトマップ (DB版)")
 
-st.title("📸 どこでも思い出フォトマップ")
-st.caption("GPS付きの写真は自動で、ない写真は地名検索で地図に残そう！")
+st.title("📸 どこでも思い出フォトマップ (Supabase保存版)")
+st.caption("写真をアップすると自動でデータベースに場所が記録されます！")
 
-# 1. データ保存用（リロードしても消えないようにする）
-if 'gps_data' not in st.session_state:
-    st.session_state['gps_data'] = {}
+# ------------------------------
+# 1. Supabase接続設定
+# ------------------------------
+try:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    supabase: Client = create_client(url, key)
+except Exception:
+    st.error("Secretsの設定が見つかりません。")
+    st.stop()
 
 # 住所検索ツール
-geolocator = Nominatim(user_agent="my_travel_memory_app")
+geolocator = Nominatim(user_agent="my_photo_map_db")
 
+# ------------------------------
 # 2. 関数定義（Exif読み取り用）
+# ------------------------------
 def get_decimal_from_dms(dms, ref):
     degrees = dms[0]
     minutes = dms[1] / 60.0
@@ -44,72 +54,116 @@ def get_lat_lon(image):
         pass
     return None, None
 
-# 3. サイドバー：写真アップロード
+# ------------------------------
+# 3. サイドバー：登録機能
+# ------------------------------
 with st.sidebar:
-    st.header("1. 写真を追加")
-    uploaded_files = st.file_uploader("ここから写真をアップロード", type=['jpg', 'jpeg'], accept_multiple_files=True)
+    st.header("📍 新しい場所を追加")
+
+    # --- A. 写真から自動登録 ---
+    st.subheader("A. 写真をアップロード")
+    uploaded_files = st.file_uploader("GPS付き写真をアップ", type=['jpg', 'jpeg'], accept_multiple_files=True)
     
     if uploaded_files:
-        for uploaded_file in uploaded_files:
-            file_name = uploaded_file.name
-            if file_name not in st.session_state['gps_data']:
+        if st.button("写真をデータベースに登録"):
+            count = 0
+            for uploaded_file in uploaded_files:
                 image = Image.open(uploaded_file)
                 lat, lon = get_lat_lon(image)
+                
                 if lat and lon:
-                    st.session_state['gps_data'][file_name] = {'lat': lat, 'lon': lon, 'type': 'auto'}
+                    # DBに保存するデータ
+                    data = {
+                        "place_name": uploaded_file.name, # ファイル名を場所に
+                        "latitude": lat,
+                        "longitude": lon,
+                        "comment": "写真から自動登録"
+                    }
+                    try:
+                        supabase.table("memory_map").insert(data).execute()
+                        count += 1
+                    except Exception as e:
+                        st.error(f"エラー: {e}")
+                else:
+                    st.warning(f"「{uploaded_file.name}」にはGPSがありませんでした。下の検索を使ってね。")
+            
+            if count > 0:
+                st.success(f"{count} 件の写真をDBに保存しました！")
+                time.sleep(1)
+                st.rerun()
 
-# 4. メイン画面レイアウト
-col1, col2 = st.columns([2, 1])
+    st.divider()
 
-pending_files = []
-if uploaded_files:
-    for f in uploaded_files:
-        if f.name not in st.session_state['gps_data']:
-            pending_files.append(f)
-
-# --- 左側：地図表示 ---
-with col1:
-    st.subheader("🌏 思い出マップ")
-    if st.session_state['gps_data']:
-        lats = [d['lat'] for d in st.session_state['gps_data'].values()]
-        lons = [d['lon'] for d in st.session_state['gps_data'].values()]
-        center_lat = sum(lats) / len(lats)
-        center_lon = sum(lons) / len(lons)
-        zoom = 8
-    else:
-        center_lat, center_lon = 35.68, 139.76
-        zoom = 5
-
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom)
-
-    for name, data in st.session_state['gps_data'].items():
-        color = "blue" if data['type'] == 'auto' else "red"
-        popup_html = f"<b>{name}</b>"
-        folium.Marker([data['lat'], data['lon']], popup=popup_html, icon=folium.Icon(color=color, icon="camera")).add_to(m)
-
-    st_folium(m, height=500, use_container_width=True)
-
-# --- 右側：手動登録フォーム ---
-with col2:
-    st.subheader("🔍 位置情報の登録")
-    if pending_files:
-        st.info(f"位置情報のない写真が {len(pending_files)} 枚あります。")
-        target_file = st.selectbox("写真を選択", pending_files, format_func=lambda x: x.name)
-        img = Image.open(target_file)
-        st.image(img, caption=target_file.name, use_container_width=True)
-        
-        place_name = st.text_input("場所の名前（例: 熊本城）", key="place_input")
-        if st.button("検索して登録"):
-            if place_name:
-                try:
-                    location = geolocator.geocode(place_name)
+    # --- B. 地名検索で手動登録 ---
+    st.subheader("B. 地名で検索して登録")
+    place_name = st.text_input("場所の名前（例: 熊本城）")
+    
+    if st.button("検索して保存"):
+        if place_name:
+            try:
+                location = geolocator.geocode(place_name)
+                if location:
+                    # DBに保存
+                    data = {
+                        "place_name": place_name,
+                        "latitude": location.latitude,
+                        "longitude": location.longitude,
+                        "comment": "地名検索で登録"
+                    }
+                    supabase.table("memory_map").insert(data).execute()
+                    st.success(f"「{place_name}」をDBに保存しました！")
                     time.sleep(1)
-                    if location:
-                        st.success(f"発見！: {location.address}")
-                        st.session_state['gps_data'][target_file.name] = {'lat': location.latitude, 'lon': location.longitude, 'type': 'manual'}
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("場所が見つかりませんでした。")
-                except Exception as e:
-                    st.error(f"エラー: {e}")
+                    st.rerun()
+                else:
+                    st.error("場所が見つかりませんでした。")
+            except Exception as e:
+                st.error(f"エラー: {e}")
+
+# ------------------------------
+# 4. メイン画面：地図表示（DBから読み込み）
+# ------------------------------
+col1, col2 = st.columns([3, 1])
+
+# DBからデータを取得
+try:
+    response = supabase.table("memory_map").select("*").order("created_at", desc=True).execute()
+    db_data = response.data
+except Exception as e:
+    st.error(f"データ読み込みエラー: {e}")
+    db_data = []
+
+with col1:
+    st.subheader(f"🌏 みんなの地図 ({len(db_data)}件)")
+    
+    if db_data:
+        # 地図の中心を決定（最新のデータの場所、なければ東京）
+        last_item = db_data[0]
+        m = folium.Map(location=[last_item['latitude'], last_item['longitude']], zoom_start=6)
+
+        # ピンを立てるループ
+        for item in db_data:
+            lat = item['latitude']
+            lon = item['longitude']
+            name = item['place_name']
+            comment = item.get('comment', '')
+            
+            # 自動登録(写真)と手動登録で色を変える演出
+            color = "blue" if "写真" in comment else "red"
+            
+            popup_html = f"<b>{name}</b><br><span style='font-size:0.8em'>{comment}</span>"
+            folium.Marker(
+                [lat, lon],
+                popup=popup_html,
+                tooltip=name,
+                icon=folium.Icon(color=color, icon="camera")
+            ).add_to(m)
+
+        st_folium(m, height=500, use_container_width=True)
+    else:
+        st.info("データがありません。サイドバーから登録してください。")
+
+# データ一覧表示（確認用）
+with col2:
+    st.write("📋 登録リスト")
+    for item in db_data:
+        st.text(f"📍 {item['place_name']}")
