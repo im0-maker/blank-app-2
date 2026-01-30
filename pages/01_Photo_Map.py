@@ -133,7 +133,7 @@ except Exception as e:
     db_data = []
 
 with col1:
-    st.subheader(f"🌏 みんなの地図 ({len(db_data)}件)")
+    st.subheader(f"🌏 私の旅行地図 ({len(db_data)}件)")
     
     if db_data:
         # 地図の中心を決定（最新のデータの場所、なければ東京）
