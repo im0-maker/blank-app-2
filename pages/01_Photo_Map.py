@@ -9,7 +9,7 @@ import time
 
 st.set_page_config(layout="wide", page_title="思い出フォトマップ (DB版)")
 
-st.title("📸 どこでも思い出フォトマップ (Supabase保存版)")
+st.title("📸 どこでも思い出フォトマップ ")
 st.caption("写真をアップすると自動でデータベースに場所が記録されます！")
 
 # ------------------------------
